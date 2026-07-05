@@ -1,9 +1,11 @@
+import json
 import time
 from datetime import datetime
 
 import yfinance as yf
 from rich.console import Console
 from rich.table import Table
+from rich.panel import Panel
 
 
 console = Console()
@@ -12,6 +14,11 @@ console = Console()
 def load_watchlist(file_path="watchlist.txt"):
     with open(file_path, "r") as file:
         return [line.strip().upper() for line in file if line.strip()]
+
+
+def load_config(file_path="config.json"):
+    with open(file_path, "r") as file:
+        return json.load(file)
 
 
 def get_stock_data(ticker):
@@ -35,17 +42,18 @@ def get_stock_data(ticker):
     }
 
 
-def calculate_score(stock):
+def calculate_score(stock, config):
     score = 0
+    scoring = config["scoring"]
 
-    if stock["price"] < 50:
-        score += 20
+    if stock["price"] < config["max_price"]:
+        score += scoring["price_under_max"]
 
-    if stock["volume"] > 100_000_000:
-        score += 25
+    if stock["volume"] > config["min_volume"]:
+        score += scoring["volume_over_min"]
 
     if stock["change_percent"] > 0:
-        score += 15
+        score += scoring["positive_change"]
 
     if stock["change_percent"] > 5:
         score += 20
@@ -95,34 +103,50 @@ def build_table(results):
     return table
 
 
-def main():
+def run_scan():
+    config = load_config()
     tickers = load_watchlist()
     results = []
-
-    console.clear()
-    console.print("=" * 70)
-    console.print("[bold]STOCK INTEL SCANNER[/bold]")
-    console.print(f"Updated: {datetime.now().strftime('%Y-%m-%d %I:%M:%S %p')}")
-    console.print("=" * 70)
+    log_lines = []
 
     for ticker in tickers:
-        console.print(f"Loading {ticker}...")
+        log_lines.append(f"Loading {ticker}...")
         data = get_stock_data(ticker)
 
         if data:
-            data["score"] = calculate_score(data)
+            data["score"] = calculate_score(data, config)
             data["alert"] = get_alert(data)
             results.append(data)
+            log_lines.append(f"{ticker} loaded successfully. Score: {data['score']}")
         else:
-            console.print(f"[red]Could not load data for {ticker}[/red]")
+            log_lines.append(f"Could not load data for {ticker}")
 
         time.sleep(0.25)
 
     results.sort(key=lambda stock: stock["score"], reverse=True)
 
-    console.clear()
-    console.print(f"[bold]Updated:[/bold] {datetime.now().strftime('%Y-%m-%d %I:%M:%S %p')}")
-    console.print(build_table(results))
+    return results, log_lines, config
+
+
+def main():
+    try:
+        while True:
+            results, log_lines, config = run_scan()
+
+            console.clear()
+            console.print(f"[bold]Updated:[/bold] {datetime.now().strftime('%Y-%m-%d %I:%M:%S %p')}")
+            console.print(build_table(results))
+
+            scanner_log = "\n".join(log_lines[-10:])
+            console.print(Panel(scanner_log, title="Scanner Log"))
+
+            refresh_seconds = config.get("refresh_seconds", 60)
+            console.print(f"[dim]Refreshing again in {refresh_seconds} seconds. Press CTRL+C to stop.[/dim]")
+
+            time.sleep(refresh_seconds)
+
+    except KeyboardInterrupt:
+        console.print("\n[bold yellow]Scanner stopped by user.[/bold yellow]")
 
 
 if __name__ == "__main__":
