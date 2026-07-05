@@ -1,0 +1,13 @@
+{
+  "refresh_seconds": 60,
+  "max_price": 50,
+  "min_volume": 100000000,
+  "scoring": {
+    "price_under_max": 20,
+    "volume_over_min": 25,
+    "positive_change": 15,
+    "rsi_healthy": 15,
+    "above_20_day_ma": 15,
+    "high_relative_volume": 10
+  }
+}
