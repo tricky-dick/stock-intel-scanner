@@ -21,16 +21,37 @@ def load_config(file_path="config.json"):
         return json.load(file)
 
 
+def calculate_rsi(close_prices, period=14):
+    delta = close_prices.diff()
+
+    gains = delta.where(delta > 0, 0)
+    losses = -delta.where(delta < 0, 0)
+
+    avg_gain = gains.rolling(window=period).mean()
+    avg_loss = losses.rolling(window=period).mean()
+
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+
+    latest_rsi = rsi.iloc[-1]
+
+    if latest_rsi != latest_rsi:
+        return None
+
+    return latest_rsi
+
+
 def get_stock_data(ticker):
     stock = yf.Ticker(ticker)
-    history = stock.history(period="2d")
+    history = stock.history(period="1mo")
 
-    if history.empty or len(history) < 2:
+    if history.empty or len(history) < 15:
         return None
 
     previous_close = history["Close"].iloc[-2]
     latest_close = history["Close"].iloc[-1]
     latest_volume = int(history["Volume"].iloc[-1])
+    rsi = calculate_rsi(history["Close"])
 
     change_percent = ((latest_close - previous_close) / previous_close) * 100
 
@@ -39,6 +60,7 @@ def get_stock_data(ticker):
         "price": latest_close,
         "change_percent": change_percent,
         "volume": latest_volume,
+        "rsi": rsi,
     }
 
 
@@ -58,10 +80,24 @@ def calculate_score(stock, config):
     if stock["change_percent"] > 5:
         score += 20
 
+    if stock["rsi"] is not None:
+        if stock["rsi"] < 30:
+            score += 15
+        elif 40 <= stock["rsi"] <= 65:
+            score += 10
+        elif stock["rsi"] > 70:
+            score -= 10
+
     return score
 
 
 def get_alert(stock):
+    if stock["rsi"] is not None and stock["rsi"] < 30:
+        return "OVERSOLD"
+
+    if stock["rsi"] is not None and stock["rsi"] > 70:
+        return "OVERBOUGHT"
+
     if stock["score"] >= 70:
         return "STRONG WATCH"
 
@@ -87,15 +123,19 @@ def build_table(results):
     table.add_column("Price", justify="right")
     table.add_column("Change %", justify="right")
     table.add_column("Volume", justify="right")
+    table.add_column("RSI", justify="right")
     table.add_column("Score", justify="right")
     table.add_column("Alert", justify="left")
 
     for item in results:
+        rsi_display = "N/A" if item["rsi"] is None else f"{item['rsi']:.2f}"
+
         table.add_row(
             item["ticker"],
             f"${item['price']:.2f}",
             f"{item['change_percent']:.2f}%",
             f"{item['volume']:,}",
+            rsi_display,
             str(item["score"]),
             item["alert"],
         )
@@ -117,7 +157,8 @@ def run_scan():
             data["score"] = calculate_score(data, config)
             data["alert"] = get_alert(data)
             results.append(data)
-            log_lines.append(f"{ticker} loaded successfully. Score: {data['score']}")
+            rsi_display = "N/A" if data["rsi"] is None else f"{data['rsi']:.2f}"
+            log_lines.append(f"{ticker} loaded. RSI: {rsi_display}. Score: {data['score']}")
         else:
             log_lines.append(f"Could not load data for {ticker}")
 
