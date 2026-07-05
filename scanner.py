@@ -35,6 +35,43 @@ def get_stock_data(ticker):
     }
 
 
+def calculate_score(stock):
+    score = 0
+
+    if stock["price"] < 50:
+        score += 20
+
+    if stock["volume"] > 100_000_000:
+        score += 25
+
+    if stock["change_percent"] > 0:
+        score += 15
+
+    if stock["change_percent"] > 5:
+        score += 20
+
+    return score
+
+
+def get_alert(stock):
+    if stock["score"] >= 70:
+        return "STRONG WATCH"
+
+    if stock["score"] >= 50:
+        return "WATCH"
+
+    if stock["volume"] > 100_000_000:
+        return "HIGH VOLUME"
+
+    if stock["change_percent"] > 5:
+        return "MOMENTUM"
+
+    if stock["change_percent"] < -5:
+        return "SELLING OFF"
+
+    return "NORMAL"
+
+
 def build_table(results):
     table = Table(title="Stock Intel Scanner")
 
@@ -42,23 +79,17 @@ def build_table(results):
     table.add_column("Price", justify="right")
     table.add_column("Change %", justify="right")
     table.add_column("Volume", justify="right")
+    table.add_column("Score", justify="right")
     table.add_column("Alert", justify="left")
 
     for item in results:
-        alert = "NORMAL"
-
-        if item["volume"] > 100_000_000:
-            alert = "HIGH VOLUME"
-
-        if item["change_percent"] > 5:
-            alert = "MOMENTUM"
-
         table.add_row(
             item["ticker"],
             f"${item['price']:.2f}",
             f"{item['change_percent']:.2f}%",
             f"{item['volume']:,}",
-            alert,
+            str(item["score"]),
+            item["alert"],
         )
 
     return table
@@ -69,21 +100,25 @@ def main():
     results = []
 
     console.clear()
-    console.print("=" * 60)
+    console.print("=" * 70)
     console.print("[bold]STOCK INTEL SCANNER[/bold]")
     console.print(f"Updated: {datetime.now().strftime('%Y-%m-%d %I:%M:%S %p')}")
-    console.print("=" * 60)
+    console.print("=" * 70)
 
     for ticker in tickers:
         console.print(f"Loading {ticker}...")
         data = get_stock_data(ticker)
 
         if data:
+            data["score"] = calculate_score(data)
+            data["alert"] = get_alert(data)
             results.append(data)
         else:
             console.print(f"[red]Could not load data for {ticker}[/red]")
 
         time.sleep(0.25)
+
+    results.sort(key=lambda stock: stock["score"], reverse=True)
 
     console.clear()
     console.print(f"[bold]Updated:[/bold] {datetime.now().strftime('%Y-%m-%d %I:%M:%S %p')}")
