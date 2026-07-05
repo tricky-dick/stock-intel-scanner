@@ -1,5 +1,5 @@
 {
-  "refresh_seconds": 60,
+  "refresh_seconds": 15,
   "max_price": 50,
   "min_volume": 100000000,
   "scoring": {
